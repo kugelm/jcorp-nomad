@@ -221,6 +221,7 @@ String rfc3339Now() {
 const byte DNS_PORT = 53;
 DNSServer dnsServer;
 AsyncWebServer server(80); // Web server on port 80
+AsyncWebSocket ws("/ws");
 std::map<AsyncWebServerRequest*, File> activeUploads;
 int connectedClients = 0;
 // LED Mode and Color Helper Wrappers
@@ -1139,6 +1140,48 @@ void handleMkdir(AsyncWebServerRequest *request) {
         request->send(500, "application/json", "{\"error\":\"Failed to create directory\"}");
     }
 }
+
+/* ----  WebSocket handler -----*/
+void notifyClients() {
+  ws.textAll(String(/*ledState*/"ok"));
+}
+
+void handleWebSocketMessage(void *arg, uint8_t *data, size_t len) {
+  AwsFrameInfo *info = (AwsFrameInfo*)arg;
+  if (info->final && info->index == 0 && info->len == len && info->opcode == WS_TEXT) {
+    data[len] = 0;
+    /*
+    if (strcmp((char*)data, "toggle") == 0) {
+      ledState = !ledState;
+      notifyClients();
+    }
+    */
+  }
+}
+
+void onEvent(AsyncWebSocket *server, AsyncWebSocketClient *client, AwsEventType type,
+             void *arg, uint8_t *data, size_t len) {
+  switch (type) {
+    case WS_EVT_CONNECT:
+      Serial.printf("WebSocket client #%u connected from %s\n", client->id(), client->remoteIP().toString().c_str());
+      break;
+    case WS_EVT_DISCONNECT:
+      Serial.printf("WebSocket client #%u disconnected\n", client->id());
+      break;
+    case WS_EVT_DATA:
+      handleWebSocketMessage(arg, data, len);
+      break;
+    case WS_EVT_PONG:
+    case WS_EVT_ERROR:
+      break;
+  }
+}
+
+void initWebSocket() {
+  ws.onEvent(onEvent);
+  server.addHandler(&ws);
+}
+
 void applyRGBSettings() {
   if (settings.rgbMode == "off") {
     RGB_SetMode(0);  // Off
@@ -2060,6 +2103,7 @@ server.on("/settings", HTTP_POST, [](AsyncWebServerRequest *request){
     ESP.restart();             
   });
 
+  initWebSocket();
 
 // ─── USB‑mode switch: jump to USB MSC on Boot‑button press ───
 attachInterrupt(BOOT_BUTTON_PIN, [](){
