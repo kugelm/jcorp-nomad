@@ -1142,20 +1142,26 @@ void handleMkdir(AsyncWebServerRequest *request) {
 }
 
 /* ----  WebSocket handler -----*/
-void notifyClients() {
-  ws.textAll(String(/*ledState*/"ok"));
+void notifyClients(String type, String msg, String user_id) {
+  ws.textAll(String( "{\"id\":\"") + user_id + String("\",\"type\":\"") + type + String("\",\"msg\":\"") + msg + String("\"}"));
 }
 
 void handleWebSocketMessage(void *arg, uint8_t *data, size_t len) {
   AwsFrameInfo *info = (AwsFrameInfo*)arg;
   if (info->final && info->index == 0 && info->len == len && info->opcode == WS_TEXT) {
     data[len] = 0;
-    /*
-    if (strcmp((char*)data, "toggle") == 0) {
-      ledState = !ledState;
-      notifyClients();
+    StaticJsonDocument<512> doc;
+    DeserializationError error = deserializeJson(doc, data);
+
+    if (error) {
+      Serial.println("Failed to parse WS JSON.");
+    } else {
+      // if (strcmp(doc["type"], "chat") == 0) {
+        /* rx'd some, spread to the world */
+        // notifyClients(String("chat"), String(doc["msg"]), String(doc["id"]));
+        ws.textAll(String((char*)data));
+     // }
     }
-    */
   }
 }
 
